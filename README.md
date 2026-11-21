@@ -1,0 +1,1 @@
+udah tinggal npm i + npm start beres (harusnya)

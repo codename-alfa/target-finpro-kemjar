@@ -1,0 +1,29 @@
+{
+  "name": "finvault-b20",
+  "version": "1.0.0",
+  "description": "FinVault Portal - Custom Penetration Testing Target for Topic B20 (No API Authentication + Insecure Change Password Feature)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:vuln": "node -e \"process.env.SEC_MODE='VULNERABLE'; require('./server')\"",
+    "start:secure": "node -e \"process.env.SEC_MODE='SECURE'; require('./server')\"",
+    "seed": "node scripts/seed.js",
+    "verify": "node scripts/verify_pentest_stages.js"
+  },
+  "keywords": [
+    "pentest",
+    "kemjar",
+    "b20",
+    "security",
+    "express",
+    "postgresql"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "pg": "^8.13.3"
+  }
+}

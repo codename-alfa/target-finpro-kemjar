@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in | FinVault Portal</title>
+  <meta name="description" content="FinVault mini fintech e-wallet portal and security audit workspace for penetration testing topic B20.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500&family=Host+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="login">
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="container topbar__inner">
+        <div class="brand-group">
+          <a href="/login" class="wordmark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+              <path d="M3 10h18"></path>
+              <circle cx="16" cy="14.5" r="1.25" fill="currentColor"></circle>
+            </svg>
+            <span>FinVault</span>
+          </a>
+          <nav class="nav-links" aria-label="Primary navigation">
+            <a href="/login" class="nav-link" aria-current="page">Sign in</a>
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/change-password" class="nav-link">Change password</a>
+          </nav>
+        </div>
+
+        <div class="control-bar">
+          <span id="sessionChip" class="chip chip--cool" hidden></span>
+          <span id="modeBadge" class="chip chip--vuln">Mode: VULNERABLE</span>
+          <button id="toggleModeBtn" type="button" class="btn">Switch to SECURE</button>
+          <button id="resetDbBtn" type="button" class="btn">Reset demo database</button>
+          <button id="logoutBtn" type="button" class="btn btn--danger" hidden>Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container main-content">
+      <div class="page-header">
+        <div>
+          <h1>FinVault E-Wallet Portal</h1>
+          <p class="page-header__desc">Custom penetration testing target for Topic B20 (No API Authentication and Insecure Change Password Feature).</p>
+        </div>
+      </div>
+
+      <div id="globalBanner" class="status-banner" hidden role="status" aria-live="polite"></div>
+
+      <section class="panels panels--split" aria-label="Authentication workspace">
+        <div class="panel">
+          <div class="panel__head">
+            <h2>Account sign in</h2>
+          </div>
+          <p class="panel__sub">Authenticate with a seeded customer or administrator account to start a session cookie.</p>
+
+          <form id="loginForm" class="form-grid" novalidate>
+            <div class="field">
+              <label for="usernameInput" class="field__label">Username</label>
+              <input id="usernameInput" name="username" type="text" class="field__input" autocomplete="username" placeholder="danish" required>
+            </div>
+            <div class="field">
+              <label for="passwordInput" class="field__label">Password</label>
+              <input id="passwordInput" name="password" type="password" class="field__input" autocomplete="current-password" placeholder="Enter account password" required>
+            </div>
+            <div id="loginFeedback" class="status-banner" hidden role="alert"></div>
+            <div class="actions-row">
+              <button id="loginSubmitBtn" type="submit" class="btn btn--primary">Sign in</button>
+              <a href="/dashboard" class="btn">Open dashboard</a>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel panel--deep">
+          <div class="panel__head">
+            <h2>Seeded test accounts</h2>
+          </div>
+          <p class="panel__sub">Use these accounts to test privilege boundaries and chained Account Takeover.</p>
+
+          <div class="credential-list">
+            <div class="credential-item">
+              <div>
+                <div class="measured">danish (customer)</div>
+                <div class="field__hint measured">DanishPass123</div>
+              </div>
+              <button type="button" class="btn" data-fill-user="danish" data-fill-pass="DanishPass123">Fill customer</button>
+            </div>
+            <div class="credential-item">
+              <div>
+                <div class="measured">budi (customer)</div>
+                <div class="field__hint measured">BudiWallet123</div>
+              </div>
+              <button type="button" class="btn" data-fill-user="budi" data-fill-pass="BudiWallet123">Fill budi</button>
+            </div>
+            <div class="credential-item">
+              <div>
+                <div class="measured">admin (administrator)</div>
+                <div class="field__hint measured">AdminVault#2026</div>
+              </div>
+              <button type="button" class="btn" data-fill-user="admin" data-fill-pass="AdminVault#2026">Fill admin</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panels" aria-label="Security audit preview">
+        <div class="panel">
+          <div class="panel__head">
+            <h2>Live security audit trail</h2>
+            <button id="refreshLoginAuditBtn" type="button" class="btn">Refresh logs</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Mode</th>
+                  <th>Request</th>
+                  <th>Actor (Status)</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="loginAuditBody">
+                <tr>
+                  <td colspan="5" class="empty-state">Loading recent security audit entries…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="container app-footer__inner">
+        <span>FinVault Portal (Topic B20)</span>
+        <span class="measured">Listener 0.0.0.0:5000 | PostgreSQL finvault_b20</span>
+      </div>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
