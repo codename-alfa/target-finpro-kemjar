@@ -8,7 +8,9 @@
     "start:vuln": "node -e \"process.env.SEC_MODE='VULNERABLE'; require('./server')\"",
     "start:secure": "node -e \"process.env.SEC_MODE='SECURE'; require('./server')\"",
     "seed": "node scripts/seed.js",
-    "verify": "node scripts/verify_pentest_stages.js"
+    "verify": "node scripts/verify_pentest_stages.js",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build"
   },
   "keywords": [
     "pentest",
