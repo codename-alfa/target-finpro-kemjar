@@ -1,24 +1,37 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useApp } from "../context/AppContext";
-import { apiJson, formatIDR } from "../lib/api";
+import { apiJson } from "../lib/api";
 import { GlobalBanner } from "../components/GlobalBanner";
 import { Footer } from "../components/Footer";
+import { AccountSummary } from "../components/AccountSummary";
 
 export function ProfileClient() {
-  const { user, securityMode } = useApp();
+  const { user, securityMode, registerRefreshHandler } = useApp();
   const isSecure = securityMode === "SECURE";
 
-  const targetUsername = user?.username || "";
+  const [customTarget, setCustomTarget] = useState<string | null>(null);
+  const targetUsername = customTarget ?? user?.username ?? "";
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const [lastSubmittedPayload, setLastSubmittedPayload] = useState<Record<string, string> | null>(
+    null
+  );
+  const [lastResponse, setLastResponse] = useState<{ status: number; data: unknown } | null>(null);
   const [feedback, setFeedback] = useState<{ text: string; tone: "ok" | "bad" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    return registerRefreshHandler(() => {
+      setCustomTarget(null);
+      setLastSubmittedPayload(null);
+    });
+  }, [registerRefreshHandler]);
 
   const outgoingPayload = useMemo(() => {
     const payload: Record<string, string> = {
@@ -26,31 +39,38 @@ export function ProfileClient() {
       newPassword,
       confirmPassword,
     };
-    if (isSecure && oldPassword.length > 0) {
+    if (oldPassword.length > 0) {
       payload.oldPassword = oldPassword;
     }
     return payload;
-  }, [isSecure, targetUsername, oldPassword, newPassword, confirmPassword]);
+  }, [targetUsername, oldPassword, newPassword, confirmPassword]);
+
+  const displayedPayload = lastSubmittedPayload ?? outgoingPayload;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setFeedback(null);
 
+    const submittedSnapshot = { ...outgoingPayload };
+    setLastSubmittedPayload(submittedSnapshot);
+
     try {
-      const res = await apiJson<{ message?: string; error?: string }>(
-        "/api/change-password",
-        {
-          method: "POST",
-          body: JSON.stringify(outgoingPayload),
-        }
-      );
+      const res = await apiJson<{ message?: string; error?: string }>("/api/change-password", {
+        method: "POST",
+        body: JSON.stringify(submittedSnapshot),
+      });
+
+      setLastResponse({ status: res.status, data: res.data });
 
       if (res.ok) {
         setFeedback({
           text: res.data.message || "Password updated successfully.",
           tone: "ok",
         });
+        setOldPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
       } else {
         setFeedback({
           text: `HTTP ${res.status}: ${res.data.error || "Password update failed."}`,
@@ -58,6 +78,7 @@ export function ProfileClient() {
         });
       }
     } catch {
+      setLastResponse({ status: 500, data: { error: "Network or server connection failed." } });
       setFeedback({
         text: "Network or server connection failed.",
         tone: "bad",
@@ -72,9 +93,9 @@ export function ProfileClient() {
       <main className="container main-content">
         <div className="page-header">
           <div>
-            <h1>User Profile &amp; Settings</h1>
+            <h1>Change Account Password</h1>
             <p className="page-header__desc">
-              Manage your FinVault account security credentials and change password.
+              Topic 2 (Insecure Change Password Feature): compare missing current password verification and client-controlled username tampering against full remediation.
             </p>
           </div>
           <div className="actions-row">
@@ -86,30 +107,11 @@ export function ProfileClient() {
 
         <GlobalBanner />
 
-        {/* Info Profil Akun User */}
         {user ? (
-          <section className="panels panels--two" aria-label="Profile Details">
-            <div className="panel">
-              <span className="stat-label">User Information</span>
-              <div className="reading text-xl font-medium">{user.fullName}</div>
-              <div className="measured text-zinc-400">Username: @{user.username}</div>
-              <div>
-                <span className={`chip ${user.role === "admin" ? "chip--amber" : "chip--cool"}`}>
-                  Role: {user.role}
-                </span>
-              </div>
-            </div>
-            <div className="panel">
-              <span className="stat-label">Account Details</span>
-              <div className="reading text-xl font-mono text-amber-400">
-                {formatIDR(user.balance)}
-              </div>
-              <div className="measured text-zinc-400">No. Rekening: {user.accountNumber}</div>
-            </div>
-          </section>
+          <AccountSummary user={user} />
         ) : (
-          <div className="status-banner status-banner--cool">
-            Not signed in. Password update parameter tampering remains testable for demonstration.
+          <div className="status-banner status-banner--cool" role="status">
+            Not signed in. Password update parameter tampering remains testable in VULNERABLE mode.
           </div>
         )}
 
@@ -123,11 +125,10 @@ export function ProfileClient() {
             : "VULNERABLE mode active: CWE-620 omits oldPassword verification and trusts the client-supplied username parameter directly."}
         </div>
 
-        {/* Section Change Password Workspace */}
-        <section className="panels" aria-label="Change password workspace">
+        <section className="panels panels--split" aria-label="Change password workspace">
           <div className="panel">
             <div className="panel__head">
-              <h2>Change Password</h2>
+              <h2>Update credentials</h2>
             </div>
 
             <form id="changePasswordForm" className="form-grid" onSubmit={handleSubmit} noValidate>
@@ -140,37 +141,44 @@ export function ProfileClient() {
                   name="username"
                   type="text"
                   className="field__input"
-                  placeholder="Not signed in"
+                  placeholder="danish or admin"
                   value={targetUsername}
-                  readOnly
-                  disabled
+                  onChange={(e) => {
+                    setCustomTarget(e.target.value);
+                    setLastSubmittedPayload(null);
+                  }}
+                  required
                 />
                 <span id="targetUsernameHint" className="field__hint">
-                  Fixed to your currently signed-in account.
+                  {isSecure
+                    ? "Server binds updates to your session ID. Tampering this field to another user triggers 403 Forbidden."
+                    : "Editable for demo: try changing to “admin” after leaking /api/users to perform Chained Account Takeover."}
                 </span>
               </div>
 
-              {isSecure && (
-                <div className="field">
-                  <label htmlFor="oldPasswordInput" className="field__label">
-                    Current password
-                  </label>
-                  <input
-                    id="oldPasswordInput"
-                    name="oldPassword"
-                    type="password"
-                    className="field__input"
-                    autoComplete="current-password"
-                    placeholder="Enter current password"
-                    value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                    required
-                  />
-                  <span id="oldPasswordHint" className="field__hint">
-                    Required and verified against bcrypt hash in PostgreSQL.
-                  </span>
-                </div>
-              )}
+              <div className="field">
+                <label htmlFor="oldPasswordInput" className="field__label">
+                  Current password
+                </label>
+                <input
+                  id="oldPasswordInput"
+                  name="oldPassword"
+                  type="password"
+                  className="field__input"
+                  autoComplete="current-password"
+                  placeholder={isSecure ? "Enter current password" : "Leave empty in VULNERABLE mode"}
+                  value={oldPassword}
+                  onChange={(e) => {
+                    setOldPassword(e.target.value);
+                    setLastSubmittedPayload(null);
+                  }}
+                />
+                <span id="oldPasswordHint" className="field__hint">
+                  {isSecure
+                    ? "Required and verified against bcrypt hash in PostgreSQL."
+                    : "Ignored by backend in VULNERABLE mode (leave blank to verify CWE-620)."}
+                </span>
+              </div>
 
               <div className="field">
                 <label htmlFor="newPasswordInput" className="field__label">
@@ -184,7 +192,10 @@ export function ProfileClient() {
                   autoComplete="new-password"
                   placeholder="Minimum 8 characters in SECURE mode"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setLastSubmittedPayload(null);
+                  }}
                   required
                 />
               </div>
@@ -201,7 +212,10 @@ export function ProfileClient() {
                   autoComplete="new-password"
                   placeholder="Repeat new password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setLastSubmittedPayload(null);
+                  }}
                   required
                 />
               </div>
@@ -227,6 +241,29 @@ export function ProfileClient() {
                 </button>
               </div>
             </form>
+          </div>
+
+          <div className="panel panel--deep">
+            <div className="panel__head">
+              <h2>HTTP payload inspector</h2>
+            </div>
+            <p className="panel__sub">
+              Live request and server response for screenshot evidence in Burp Suite, Postman, or browser demos.
+            </p>
+            <div className="field">
+              <span className="field__label">Outgoing request</span>
+              <pre id="reqPayloadPreview" className="code-block">
+                {`POST /api/change-password\nContent-Type: application/json\n\n${JSON.stringify(displayedPayload, null, 2)}`}
+              </pre>
+            </div>
+            <div className="field">
+              <span className="field__label">Server response</span>
+              <pre id="resPayloadPreview" className="code-block">
+                {lastResponse
+                  ? `HTTP ${lastResponse.status}\n\n${JSON.stringify(lastResponse.data, null, 2)}`
+                  : "Waiting for submission…"}
+              </pre>
+            </div>
           </div>
         </section>
       </main>

@@ -7,78 +7,97 @@ import { useApp } from "../context/AppContext";
 
 export function Topbar() {
   const pathname = usePathname();
-  const { user, logout, isActionLoading } = useApp();
-
-  const isNavVisible = pathname.startsWith("/dashboard") || pathname.startsWith("/profile");
-
-  if (!isNavVisible) {
-    return null;
-  }
+  const { user, securityMode, toggleMode, resetDb, logout, isActionLoading } = useApp();
+  const isSecure = securityMode === "SECURE";
+  const isChangePasswordActive =
+    pathname.startsWith("/change-password") || pathname.startsWith("/profile");
 
   return (
-    <header className="sticky top-0 z-50 bg-[#07090e] border-b border-[#1f2430]">
-      <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-        {/* Brand */}
-        <Link
-          href={user ? "/dashboard" : "/login"}
-          className="flex items-center gap-2 text-white font-semibold text-lg tracking-tight hover:opacity-90 transition-opacity"
-        >
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#f59e0b"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-            <circle cx="16" cy="15" r="1" fill="#f59e0b"></circle>
-          </svg>
-          <span>FinVault</span>
-        </Link>
+    <header className="topbar">
+      <div className="container topbar__inner">
+        <div className="brand-group">
+          <Link href={user ? "/dashboard" : "/login"} className="wordmark">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 10h18" />
+              <circle cx="16" cy="14.5" r="1.25" fill="currentColor" />
+            </svg>
+            <span>FinVault</span>
+          </Link>
 
-        {/* Navigation links & Logout */}
-        <div className="flex items-center gap-6">
-          <nav className="flex items-center gap-6">
+          <nav className="nav-links" aria-label="Primary navigation">
+            <Link
+              href="/login"
+              className="nav-link"
+              aria-current={pathname === "/login" ? "page" : undefined}
+            >
+              Sign in
+            </Link>
             <Link
               href="/dashboard"
-              className={`text-sm font-medium transition-colors ${
-                pathname === "/dashboard"
-                  ? "text-white font-semibold"
-                  : "text-zinc-400 hover:text-white"
-              }`}
+              className="nav-link"
+              aria-current={pathname.startsWith("/dashboard") ? "page" : undefined}
             >
               Dashboard
             </Link>
             <Link
-              href="/profile"
-              className={`text-sm font-medium transition-colors ${
-                pathname === "/profile"
-                  ? "text-white font-semibold"
-                  : "text-zinc-400 hover:text-white"
-              }`}
+              href="/change-password"
+              className="nav-link"
+              aria-current={isChangePasswordActive ? "page" : undefined}
             >
-              Profile
+              Change password
             </Link>
           </nav>
+        </div>
 
+        <div className="control-bar">
           {user && (
-            <div className="flex items-center gap-3 pl-4 border-l border-[#1f2430]">
-              <span className="text-xs text-zinc-400 font-mono hidden sm:inline">
-                {user.username} ({user.role})
-              </span>
-              <button
-                type="button"
-                disabled={isActionLoading}
-                onClick={logout}
-                className="px-3 py-1.5 text-xs font-medium text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
-              >
-                Sign out
-              </button>
-            </div>
+            <span id="sessionChip" className="chip chip--cool">
+              {user.username} ({user.role})
+            </span>
+          )}
+          <span
+            id="modeBadge"
+            className={`chip ${isSecure ? "chip--secure" : "chip--vuln"}`}
+          >
+            Mode: {securityMode}
+          </span>
+          <button
+            id="toggleModeBtn"
+            type="button"
+            className="btn"
+            disabled={isActionLoading}
+            onClick={() => void toggleMode()}
+          >
+            {isSecure ? "Switch to VULNERABLE" : "Switch to SECURE"}
+          </button>
+          <button
+            id="resetDbBtn"
+            type="button"
+            className="btn"
+            disabled={isActionLoading}
+            onClick={() => void resetDb()}
+          >
+            Reset demo database
+          </button>
+          {user && (
+            <button
+              id="logoutBtn"
+              type="button"
+              className="btn btn--danger"
+              disabled={isActionLoading}
+              onClick={() => void logout()}
+            >
+              Sign out
+            </button>
           )}
         </div>
       </div>

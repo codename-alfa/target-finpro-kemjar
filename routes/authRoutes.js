@@ -47,7 +47,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
-    req.session.user = {
+    const sessionUser = {
       id: user.id,
       username: user.username,
       fullName: user.full_name,
@@ -55,6 +55,17 @@ router.post('/login', async (req, res) => {
       accountNumber: user.account_number,
       role: user.role
     };
+
+    await new Promise((resolve, reject) => {
+      req.session.regenerate((regenErr) => {
+        if (regenErr) return reject(regenErr);
+        req.session.user = sessionUser;
+        req.session.save((saveErr) => {
+          if (saveErr) return reject(saveErr);
+          resolve();
+        });
+      });
+    });
 
     await writeAuditLog({
       req,
@@ -67,7 +78,7 @@ router.post('/login', async (req, res) => {
       message: 'Login successful.',
       securityMode: getMode(),
       user: {
-        ...req.session.user,
+        ...sessionUser,
         balance: Number(user.balance)
       }
     });

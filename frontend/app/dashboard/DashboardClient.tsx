@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useApp } from "../context/AppContext";
 import { apiJson, formatIDR } from "../lib/api";
 import { GlobalBanner } from "../components/GlobalBanner";
 import { Footer } from "../components/Footer";
+import { AccountSummary } from "../components/AccountSummary";
 import { AuditTable, AuditLogEntry } from "../components/AuditTable";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 
 interface Transaction {
   id?: number;
@@ -27,411 +29,343 @@ interface UserDirectoryItem {
   role: string;
 }
 
+function resolveApiChip(
+  status: number | null,
+  ok: boolean,
+  isSecure: boolean,
+  isAdmin: boolean,
+  unprobedText: string
+): { label: string; className: string } {
+  if (status === null) {
+    return { label: unprobedText, className: "chip chip--cool" };
+  }
+  if (status === 401 || status === 403) {
+    return { label: `HTTP ${status}`, className: "chip chip--secure" };
+  }
+  if (ok) {
+    return {
+      label: `HTTP ${status}`,
+      className: `chip ${isSecure && isAdmin ? "chip--secure" : "chip--vuln"}`,
+    };
+  }
+  return { label: `HTTP ${status}`, className: "chip chip--vuln" };
+}
+
+function resolveErrorBannerClass(status: number | null): string {
+  if (status === 401 || status === 403) {
+    return "status-banner status-banner--ok";
+  }
+  return "status-banner status-banner--bad";
+}
+
 export function DashboardClient() {
-  const { user, securityMode, toggleMode, resetDb, isActionLoading, syncControlBar, registerRefreshHandler } = useApp();
+  const { user, securityMode, isLoading, registerRefreshHandler } = useApp();
   const isAdmin = user?.role === "admin";
   const isAnonymous = !user;
   const isSecure = securityMode === "SECURE";
 
-  // Transactions state
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [txLoading, setTxLoading] = useState(true);
-  const [txError, setTxError] = useState<string | null>(null);
+  const {
+    data: txData,
+    loading: txLoading,
+    status: txStatus,
+    error: txError,
+    run: runTx,
+    reset: resetTx,
+  } = useAsyncResource<Transaction[]>();
+  const {
+    data: usersData,
+    loading: usersLoading,
+    status: usersStatus,
+    ok: usersOk,
+    error: usersError,
+    run: runUsers,
+    reset: resetUsers,
+  } = useAsyncResource<UserDirectoryItem[]>(null);
+  const {
+    data: auditData,
+    loading: auditLoading,
+    status: auditStatus,
+    ok: auditOk,
+    error: auditError,
+    run: runAudit,
+    reset: resetAudit,
+  } = useAsyncResource<AuditLogEntry[]>(null);
 
-  // Users Directory state (admin only)
-  const [users, setUsers] = useState<UserDirectoryItem[]>([]);
-  const [usersLoading, setUsersLoading] = useState(true);
-  const [usersStatus, setUsersStatus] = useState<number>(200);
-  const [usersOk, setUsersOk] = useState<boolean>(true);
-  const [usersError, setUsersError] = useState<string | null>(null);
-
-  // Audit Logs state (admin only)
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [auditLoading, setAuditLoading] = useState(true);
-  const [auditStatus, setAuditStatus] = useState<number>(200);
-  const [auditOk, setAuditOk] = useState<boolean>(true);
-  const [auditError, setAuditError] = useState<string | null>(null);
-
-  const fetchTransactions = useCallback(() => {
-    apiJson<{ transactions?: Transaction[]; error?: string }>("/api/transactions")
-      .then((res) => {
-        if (res.ok) {
-          setTransactions(res.data.transactions || []);
-          setTxError(null);
-        } else {
-          setTxError(`HTTP ${res.status}: ${res.data.error || "Failed to load transactions"}`);
-        }
-      })
-      .catch(() => {
-        setTxError("Network error while loading transactions.");
-      })
-      .finally(() => {
-        setTxLoading(false);
-      });
-  }, []);
-
-  const fetchUsersDirectory = useCallback(() => {
-    apiJson<{ users?: UserDirectoryItem[]; error?: string }>("/api/users")
-      .then((res) => {
-        setUsersStatus(res.status);
-        setUsersOk(res.ok);
-        if (res.ok) {
-          setUsers(res.data.users || []);
-          setUsersError(null);
-        } else {
-          setUsersError(`Access blocked with HTTP ${res.status}: ${res.data.error || "Access Denied"}`);
-        }
-      })
-      .catch(() => {
-        setUsersStatus(500);
-        setUsersOk(false);
-        setUsersError("Network error while querying users directory.");
-      })
-      .finally(() => {
-        setUsersLoading(false);
-      });
-  }, []);
-
-  const fetchAuditLogs = useCallback(() => {
-    apiJson<{ logs?: AuditLogEntry[]; error?: string }>("/api/audit-logs?ui_poll=1")
-      .then((res) => {
-        setAuditStatus(res.status);
-        setAuditOk(res.ok);
-        if (res.ok) {
-          setAuditLogs(res.data.logs || []);
-          setAuditError(null);
-        } else {
-          setAuditError(`Audit endpoint blocked with HTTP ${res.status}: ${res.data.error || "Access Denied"}`);
-        }
-      })
-      .catch(() => {
-        setAuditStatus(500);
-        setAuditOk(false);
-        setAuditError("Network error while querying audit logs.");
-      })
-      .finally(() => {
-        setAuditLoading(false);
-      });
-  }, []);
+  const loadTransactions = useCallback(() => {
+    void runTx<{ transactions?: Transaction[]; error?: string }>(
+      () => apiJson("/api/transactions"),
+      (body) => body.transactions || [],
+      (status, body) => `HTTP ${status}: ${body.error || "Failed to load transactions"}`
+    );
+  }, [runTx]);
 
   const loadUsersDirectory = useCallback(() => {
-    setUsersLoading(true);
-    setUsersError(null);
-    fetchUsersDirectory();
-  }, [fetchUsersDirectory]);
+    return runUsers<{ users?: UserDirectoryItem[]; error?: string }>(
+      () => apiJson("/api/users"),
+      (body) => body.users || [],
+      (status, body) => `Access blocked with HTTP ${status}: ${body.error || "Access Denied"}`
+    );
+  }, [runUsers]);
 
-  const loadAuditLogs = useCallback(() => {
-    setAuditLoading(true);
-    setAuditError(null);
-    fetchAuditLogs();
-  }, [fetchAuditLogs]);
+  const loadAuditLogs = useCallback(
+    (uiPoll = true) => {
+      const path = uiPoll ? "/api/audit-logs?ui_poll=1" : "/api/audit-logs";
+      void runAudit<{ logs?: AuditLogEntry[]; error?: string }>(
+        () => apiJson(path),
+        (body) => body.logs || [],
+        (status, body) => `Audit endpoint blocked with HTTP ${status}: ${body.error || "Access Denied"}`
+      );
+    },
+    [runAudit]
+  );
 
-  const triggerRefreshAll = useCallback(() => {
-    syncControlBar();
-    fetchTransactions();
-    fetchUsersDirectory();
-    fetchAuditLogs();
-  }, [syncControlBar, fetchTransactions, fetchUsersDirectory, fetchAuditLogs]);
+  const syncDashboardData = useCallback(() => {
+    if (isLoading) return;
+    if (user) {
+      loadTransactions();
+    } else {
+      resetTx(null);
+    }
+
+    if (isAdmin) {
+      loadUsersDirectory();
+      loadAuditLogs(true);
+    } else {
+      resetUsers(null);
+      resetAudit(null);
+    }
+  }, [
+    isLoading,
+    user,
+    isAdmin,
+    loadTransactions,
+    loadUsersDirectory,
+    loadAuditLogs,
+    resetTx,
+    resetUsers,
+    resetAudit,
+  ]);
 
   useEffect(() => {
-    triggerRefreshAll();
-    const unregister = registerRefreshHandler(() => {
-      triggerRefreshAll();
-    });
-    return unregister;
-  }, [triggerRefreshAll, registerRefreshHandler]);
+    syncDashboardData();
+    return registerRefreshHandler(syncDashboardData);
+  }, [syncDashboardData, registerRefreshHandler]);
+
+  const usersChip = resolveApiChip(usersStatus, usersOk, isSecure, isAdmin, "Not probed");
+  const auditChip = resolveApiChip(auditStatus, auditOk, isSecure, isAdmin, "Not probed");
 
   return (
     <>
       <main className="container main-content">
         <div className="page-header">
           <div>
-            <h1>Dashboard</h1>
+            <h1>Wallet &amp; API Security Console</h1>
             <p className="page-header__desc">
               {isAdmin
-                ? "Administrator Security Console: ledger, user accounts, and audit log monitor."
-                : "Welcome to your FinVault e-wallet overview."}
+                ? "Administrator Security Console: ledger, user directory exposure (/api/users), and audit log monitor."
+                : "Inspect your e-wallet balance, transaction ledger, and test API access boundaries."}
             </p>
           </div>
-          {isAdmin && (
-            <div className="actions-row">
-              <Link href="/profile" className="btn btn--primary">
-                Change password
-              </Link>
-            </div>
-          )}
+          <div className="actions-row">
+            <Link href="/change-password" className="btn btn--primary">
+              Change password
+            </Link>
+          </div>
         </div>
 
         <GlobalBanner />
 
-        {/* Jika ANONYMOUS: Berikan pemberitahuan login saja */}
-        {isAnonymous && (
-          <div className="panel text-center py-12">
-            <h2 className="text-xl font-bold mb-2">Anda Belum Masuk</h2>
-            <p className="text-zinc-400 text-sm mb-6">
-              Silakan login terlebih dahulu untuk mengakses akun e-wallet Anda.
-            </p>
-            <div>
-              <Link href="/login" className="btn btn--primary">
-                Menuju Halaman Login
-              </Link>
-            </div>
+        {isAnonymous ? (
+          <div className="status-banner status-banner--cool" role="status">
+            Not signed in. Sign in to view your wallet ledger, or use Probe GET /api/users below to test unauthenticated API exposure in {securityMode} mode.{" "}
+            <Link href="/login">Go to Sign in</Link>.
           </div>
+        ) : (
+          <AccountSummary user={user} />
         )}
 
-        {/* Jika CUSTOMER: Cukup menampilkan balance dan account holder saja */}
-        {!isAnonymous && !isAdmin && (
-          <section className="panels panels--two" aria-label="Customer Account Summary">
+        {!isAnonymous && (
+          <section className="panels" aria-label="Transaction ledger">
             <div className="panel">
-              <span className="stat-label">Available balance</span>
-              <div id="walletBalance" className="reading text-amber-400">
-                {formatIDR(user?.balance ?? 0)}
+              <div className="panel__head">
+                <h2>Transaction ledger (/api/transactions)</h2>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={txLoading}
+                  onClick={loadTransactions}
+                >
+                  Refresh transactions
+                </button>
               </div>
-              <span className="stat-label stat-meta measured" id="walletAccount">
-                No. Rekening: {user ? user.accountNumber : "-"}
-              </span>
-            </div>
-            <div className="panel">
-              <span className="stat-label">Account holder</span>
-              <div id="walletFullName" className="reading text-xl font-medium">
-                {user ? `${user.fullName} (${user.username})` : "-"}
-              </div>
-              <div>
-                <span id="walletRole" className="chip chip--cool">
-                  {user ? user.role : "customer"}
-                </span>
+              <div id="txStateContainer">
+                {txLoading ? (
+                  <div className="panel">
+                    <div className="skeleton-line" />
+                    <div className="skeleton-line" />
+                  </div>
+                ) : txError ? (
+                  <div className={resolveErrorBannerClass(txStatus)}>
+                    {txError}
+                  </div>
+                ) : !txData || txData.length === 0 ? (
+                  <div className="empty-state">No ledger transactions found for this scope.</div>
+                ) : (
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Transaction ID</th>
+                          <th>Account</th>
+                          <th>Type</th>
+                          <th>Amount</th>
+                          <th>Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {txData.map((tx, idx) => {
+                          const typeChip = tx.type === "CREDIT" ? "chip--secure" : "chip--amber";
+                          return (
+                            <tr key={tx.id ?? idx}>
+                              <td className="measured">{tx.tx_code}</td>
+                              <td className="measured">
+                                {tx.username} ({tx.account_number})
+                              </td>
+                              <td>
+                                <span className={`chip ${typeChip}`}>{tx.type}</span>
+                              </td>
+                              <td className="measured">{formatIDR(tx.amount)}</td>
+                              <td>{tx.description}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </section>
         )}
 
-        {/* Jika ADMIN: Tampilkan kontrol mode + reset, balance, holder, ledger, user directory, dan audit trail */}
-        {isAdmin && (
-          <>
-            {/* Panel Khusus Admin: Kontrol Mode Keamanan dan Reset Database */}
-            <section className="panels">
-              <div className="panel bg-[#0f121a] border border-[#1f2430]">
-                <div className="panel__head">
-                  <div>
-                    <h2 className="text-base font-semibold">Security Mode &amp; Demo Controls</h2>
-                    <p className="panel__sub">
-                      Kelola konfigurasi pengujian keamanan dan reset database demo.
-                    </p>
-                  </div>
-                  <div className="actions-row">
-                    <span
-                      id="modeBadge"
-                      className={`chip ${isSecure ? "chip--secure" : "chip--vuln"}`}
-                    >
-                      Mode: {securityMode}
-                    </span>
-                    <button
-                      id="toggleModeBtn"
-                      type="button"
-                      className="btn"
-                      disabled={isActionLoading}
-                      onClick={toggleMode}
-                    >
-                      {isSecure ? "Switch to VULNERABLE" : "Switch to SECURE"}
-                    </button>
-                    <button
-                      id="resetDbBtn"
-                      type="button"
-                      className="btn"
-                      disabled={isActionLoading}
-                      onClick={resetDb}
-                    >
-                      Reset demo database
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Account Summary Admin */}
-            <section className="panels panels--two" aria-label="Account summary">
-              <div className="panel">
-                <span className="stat-label">Available balance</span>
-                <div id="walletBalance" className="reading text-amber-400">
-                  {formatIDR(user?.balance ?? 0)}
-                </div>
-                <span className="stat-label stat-meta measured" id="walletAccount">
-                  No. Rekening: {user ? user.accountNumber : "-"}
+        <section className="panels" aria-label="Customer directory API">
+          <div className="panel">
+            <div className="panel__head">
+              <h2>Customer directory (/api/users)</h2>
+              <div className="actions-row">
+                <span id="usersApiChip" className={usersChip.className}>
+                  {usersChip.label}
                 </span>
+                <button
+                  id="probeUsersBtn"
+                  type="button"
+                  className="btn"
+                  disabled={usersLoading}
+                  onClick={async () => {
+                    await loadUsersDirectory();
+                    if (isAdmin) loadAuditLogs(true);
+                  }}
+                >
+                  Probe GET /api/users
+                </button>
               </div>
-              <div className="panel">
-                <span className="stat-label">Account holder</span>
-                <div id="walletFullName" className="reading text-xl font-medium">
-                  {user ? `${user.fullName} (${user.username})` : "-"}
+            </div>
+            <p className="panel__sub">
+              Topic 1 (No API Authentication): returns all accounts including administrator metadata in VULNERABLE mode without login, or blocks with 401/403 in SECURE mode.
+            </p>
+            <div id="usersStateContainer">
+              {usersLoading ? (
+                <div className="panel">
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line" />
                 </div>
-                <div>
-                  <span id="walletRole" className="chip chip--amber">
-                    {user ? user.role : "admin"}
-                  </span>
+              ) : usersStatus === null ? (
+                <div className="empty-state">
+                  Not probed yet. Click Probe GET /api/users to inspect API access for your current session.
                 </div>
-              </div>
-            </section>
+              ) : !usersOk && usersError ? (
+                <div className={resolveErrorBannerClass(usersStatus)}>
+                  {usersError}
+                </div>
+              ) : !usersData || usersData.length === 0 ? (
+                <div className="empty-state">No accounts found.</div>
+              ) : (
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Full name</th>
+                        <th>Account number</th>
+                        <th>Balance</th>
+                        <th>Role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usersData.map((u) => (
+                        <tr key={u.id}>
+                          <td className="measured">{u.id}</td>
+                          <td className="measured">{u.username}</td>
+                          <td>{u.full_name}</td>
+                          <td className="measured">{u.account_number}</td>
+                          <td className="measured">{formatIDR(u.balance)}</td>
+                          <td>
+                            <span
+                              className={`chip ${u.role === "admin" ? "chip--amber" : "chip--cool"}`}
+                            >
+                              {u.role}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
 
-            {/* Transaction Ledger Admin */}
-            <section className="panels" aria-label="Transaction ledger">
-              <div className="panel">
-                <div className="panel__head">
-                  <h2>Transaction Ledger</h2>
-                </div>
-                <div id="txStateContainer">
-                  {txLoading ? (
-                    <div className="panel">
-                      <div className="skeleton-line" />
-                      <div className="skeleton-line" />
-                    </div>
-                  ) : txError ? (
-                    <div className="status-banner status-banner--bad">{txError}</div>
-                  ) : transactions.length === 0 ? (
-                    <div className="empty-state">No ledger transactions found for this scope.</div>
-                  ) : (
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Transaction ID</th>
-                            <th>Account</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Description</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {transactions.map((tx, idx) => {
-                            const typeChip = tx.type === "CREDIT" ? "chip--secure" : "chip--amber";
-                            return (
-                              <tr key={tx.id ?? idx}>
-                                <td className="measured">{tx.tx_code}</td>
-                                <td className="measured">
-                                  {tx.username} ({tx.account_number})
-                                </td>
-                                <td>
-                                  <span className={`chip ${typeChip}`}>{tx.type}</span>
-                                </td>
-                                <td className="measured">{formatIDR(tx.amount)}</td>
-                                <td>{tx.description}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+        <section className="panels" aria-label="Security audit trail">
+          <div className="panel panel--deep">
+            <div className="panel__head">
+              <h2>Security audit trail (/api/audit-logs)</h2>
+              <div className="actions-row">
+                <span id="auditApiChip" className={auditChip.className}>
+                  {auditChip.label}
+                </span>
+                <button
+                  id="refreshAuditBtn"
+                  type="button"
+                  className="btn"
+                  disabled={auditLoading}
+                  onClick={() => loadAuditLogs(isAdmin)}
+                >
+                  Refresh audit log
+                </button>
               </div>
-            </section>
-
-            {/* Customer Directory Admin */}
-            <section className="panels" aria-label="Customer directory">
-              <div className="panel">
-                <div className="panel__head">
-                  <h2>Customer Directory</h2>
-                  <div className="actions-row">
-                    <span
-                      id="usersApiChip"
-                      className={`chip ${usersOk ? "chip--vuln" : "chip--secure"}`}
-                    >
-                      HTTP {usersStatus}
-                    </span>
-                    <button
-                      id="probeUsersBtn"
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        loadUsersDirectory();
-                        loadAuditLogs();
-                      }}
-                    >
-                      Probe Users
-                    </button>
-                  </div>
+            </div>
+            <div id="auditStateContainer">
+              {auditStatus === null && !auditLoading ? (
+                <div className="empty-state">
+                  Not loaded automatically for non-admin sessions. Click Refresh audit log to probe /api/audit-logs.
                 </div>
-                <div id="usersStateContainer">
-                  {usersLoading ? (
-                    <div className="panel">
-                      <div className="skeleton-line" />
-                      <div className="skeleton-line" />
-                    </div>
-                  ) : !usersOk && usersError ? (
-                    <div className="status-banner status-banner--ok">{usersError}</div>
-                  ) : users.length === 0 ? (
-                    <div className="empty-state">No accounts found.</div>
-                  ) : (
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>ID</th>
-                            <th>Username</th>
-                            <th>Full name</th>
-                            <th>Account number</th>
-                            <th>Balance</th>
-                            <th>Role</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {users.map((u) => (
-                            <tr key={u.id}>
-                              <td className="measured">{u.id}</td>
-                              <td className="measured">{u.username}</td>
-                              <td>{u.full_name}</td>
-                              <td className="measured">{u.account_number}</td>
-                              <td className="measured">{formatIDR(u.balance)}</td>
-                              <td>
-                                <span
-                                  className={`chip ${u.role === "admin" ? "chip--amber" : "chip--cool"}`}
-                                >
-                                  {u.role}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+              ) : !auditOk && auditError ? (
+                <div className={resolveErrorBannerClass(auditStatus)}>
+                  {auditError}
                 </div>
-              </div>
-            </section>
-
-            {/* Security Audit Trail Admin */}
-            <section className="panels" aria-label="Security audit trail">
-              <div className="panel panel--deep">
-                <div className="panel__head">
-                  <h2>Security Audit Trail</h2>
-                  <div className="actions-row">
-                    <span
-                      id="auditApiChip"
-                      className={`chip ${auditOk ? "chip--cool" : "chip--secure"}`}
-                    >
-                      HTTP {auditStatus}
-                    </span>
-                    <button
-                      id="refreshAuditBtn"
-                      type="button"
-                      className="btn"
-                      onClick={loadAuditLogs}
-                    >
-                      Refresh audit log
-                    </button>
-                  </div>
-                </div>
-                <div id="auditStateContainer">
-                  <AuditTable
-                    logs={auditLogs}
-                    loading={auditLoading}
-                    errorMessage={auditError}
-                    emptyMessage="No audit log entries recorded yet."
-                  />
-                </div>
-              </div>
-            </section>
-          </>
-        )}
+              ) : (
+                <AuditTable
+                  logs={auditData || []}
+                  loading={auditLoading}
+                  errorMessage={null}
+                  emptyMessage="No audit log entries recorded yet."
+                />
+              )}
+            </div>
+          </div>
+        </section>
       </main>
 
       <Footer detail="Kelompok 12" />

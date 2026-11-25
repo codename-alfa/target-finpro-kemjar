@@ -5,12 +5,16 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "start:vuln": "node -e \"process.env.SEC_MODE='VULNERABLE'; require('./server')\"",
-    "start:secure": "node -e \"process.env.SEC_MODE='SECURE'; require('./server')\"",
+    "dev": "node -e \"process.env.NEXT_DEV='true'; require('./server').startServer().catch(e => { console.error(e); process.exit(1); })\"",
+    "build": "node -e \"process.env.UNIFIED_SERVER='true'; require('child_process').execSync('npm --prefix frontend run build', { stdio: 'inherit' })\"",
+    "start:vuln": "node -e \"process.env.SEC_MODE='VULNERABLE'; require('./server').startServer().catch(e => { console.error(e); process.exit(1); })\"",
+    "start:secure": "node -e \"process.env.SEC_MODE='SECURE'; require('./server').startServer().catch(e => { console.error(e); process.exit(1); })\"",
     "seed": "node scripts/seed.js",
     "verify": "node scripts/verify_pentest_stages.js",
     "frontend:dev": "npm --prefix frontend run dev",
-    "frontend:build": "npm --prefix frontend run build"
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:start": "npm --prefix frontend run start",
+    "frontend:lint": "npm --prefix frontend run lint"
   },
   "keywords": [
     "pentest",

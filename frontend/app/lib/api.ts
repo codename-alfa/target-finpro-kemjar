@@ -20,13 +20,14 @@ export async function apiJson<T = unknown>(
   url: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  const { headers, ...restOptions } = options;
   const res = await fetch(url, {
     credentials: "include",
+    ...restOptions,
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers || {}),
+      ...(headers || {}),
     },
-    ...options,
   });
 
   let data: unknown = {};

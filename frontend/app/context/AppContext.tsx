@@ -4,6 +4,9 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { useRouter } from "next/navigation";
 import { apiJson } from "../lib/api";
 
+export type SecurityMode = "VULNERABLE" | "SECURE";
+export type BannerTone = "ok" | "bad" | "cool";
+
 export interface UserSession {
   id: number;
   username: string;
@@ -15,17 +18,17 @@ export interface UserSession {
 
 interface BannerMessage {
   text: string;
-  tone: "ok" | "bad" | "cool";
+  tone: BannerTone;
 }
 
 interface AppContextType {
-  securityMode: "VULNERABLE" | "SECURE";
+  securityMode: SecurityMode;
   user: UserSession | null;
   globalBanner: BannerMessage | null;
   isLoading: boolean;
   isActionLoading: boolean;
-  showGlobalMessage: (text: string, tone?: "ok" | "bad" | "cool") => void;
-  syncControlBar: () => Promise<{ securityMode: "VULNERABLE" | "SECURE"; user: UserSession | null }>;
+  showGlobalMessage: (text: string, tone?: BannerTone) => void;
+  syncControlBar: () => Promise<{ securityMode: SecurityMode; user: UserSession | null }>;
   toggleMode: () => Promise<void>;
   resetDb: () => Promise<void>;
   logout: () => Promise<void>;
@@ -36,7 +39,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [securityMode, setSecurityMode] = useState<"VULNERABLE" | "SECURE">("VULNERABLE");
+  const [securityMode, setSecurityMode] = useState<SecurityMode>("VULNERABLE");
   const [user, setUser] = useState<UserSession | null>(null);
   const [globalBanner, setGlobalBanner] = useState<BannerMessage | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -61,14 +64,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const showGlobalMessage = useCallback((text: string, tone: "ok" | "bad" | "cool" = "cool") => {
+  const showGlobalMessage = useCallback((text: string, tone: BannerTone = "cool") => {
     setGlobalBanner({ text, tone });
   }, []);
 
   const syncControlBar = useCallback(async () => {
     try {
-      const statusRes = await apiJson<{ securityMode: "VULNERABLE" | "SECURE" }>("/api/admin/status");
-      let currentMode: "VULNERABLE" | "SECURE" = "VULNERABLE";
+      const statusRes = await apiJson<{ securityMode: SecurityMode }>("/api/admin/status");
+      let currentMode: SecurityMode = "VULNERABLE";
       if (statusRes.ok && statusRes.data?.securityMode) {
         currentMode = statusRes.data.securityMode;
         setSecurityMode(currentMode);
@@ -76,7 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const meRes = await apiJson<{
         authenticated: boolean;
-        securityMode?: "VULNERABLE" | "SECURE";
+        securityMode?: SecurityMode;
         user?: UserSession;
       }>("/api/me");
 
@@ -93,15 +96,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       return { securityMode: currentMode, user: currentUser };
+    } catch {
+      setUser(null);
+      showGlobalMessage("Cannot reach Express backend API on port 5000.", "bad");
+      return { securityMode: "VULNERABLE" as SecurityMode, user: null };
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [showGlobalMessage]);
 
   const toggleMode = useCallback(async () => {
     setIsActionLoading(true);
     try {
-      const res = await apiJson<{ securityMode: "VULNERABLE" | "SECURE"; message: string; error?: string }>(
+      const res = await apiJson<{ securityMode: SecurityMode; message: string; error?: string }>(
         "/api/admin/toggle-mode",
         { method: "POST", body: "{}" }
       );
@@ -115,6 +122,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         showGlobalMessage(res.data?.error || "Failed to switch security mode.", "bad");
       }
+    } catch {
+      showGlobalMessage("Network error while switching security mode.", "bad");
     } finally {
       setIsActionLoading(false);
     }
@@ -134,6 +143,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         showGlobalMessage(res.data?.error || "Failed to reset demo database.", "bad");
       }
+    } catch {
+      showGlobalMessage("Network error while resetting demo database.", "bad");
     } finally {
       setIsActionLoading(false);
     }
@@ -143,15 +154,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsActionLoading(true);
     try {
       await apiJson("/api/logout", { method: "POST", body: "{}" });
-      setUser(null);
-      router.push("/login");
+    } catch {
+      showGlobalMessage("Backend unreachable during sign out; local session cleared.", "bad");
     } finally {
+      setUser(null);
       setIsActionLoading(false);
+      router.push("/login");
     }
-  }, [router]);
+  }, [router, showGlobalMessage]);
 
   useEffect(() => {
-    syncControlBar();
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) {
+        void syncControlBar();
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [syncControlBar]);
 
   return (

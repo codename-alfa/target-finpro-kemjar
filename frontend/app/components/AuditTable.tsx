@@ -25,56 +25,6 @@ export function AuditTable({
   errorMessage = null,
   emptyMessage = "No audit log entries recorded yet.",
 }: AuditTableProps) {
-  if (loading) {
-    return (
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Mode</th>
-              <th>Request</th>
-              <th>Actor (Status)</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={5} className="empty-state">
-                Loading recent security audit entries…
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  if (errorMessage) {
-    return (
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Mode</th>
-              <th>Request</th>
-              <th>Actor (Status)</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={5} className="empty-state">
-                {errorMessage}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
   return (
     <div className="table-scroll">
       <table className="data-table">
@@ -88,7 +38,19 @@ export function AuditTable({
           </tr>
         </thead>
         <tbody>
-          {logs.length === 0 ? (
+          {loading ? (
+            <tr>
+              <td colSpan={5} className="empty-state">
+                Loading recent security audit entries…
+              </td>
+            </tr>
+          ) : errorMessage ? (
+            <tr>
+              <td colSpan={5} className="empty-state">
+                {errorMessage}
+              </td>
+            </tr>
+          ) : logs.length === 0 ? (
             <tr>
               <td colSpan={5} className="empty-state">
                 {emptyMessage}

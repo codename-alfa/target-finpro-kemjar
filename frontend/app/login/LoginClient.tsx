@@ -1,18 +1,50 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "../context/AppContext";
 import { apiJson } from "../lib/api";
+import { GlobalBanner } from "../components/GlobalBanner";
+import { Footer } from "../components/Footer";
+import { AuditTable, AuditLogEntry } from "../components/AuditTable";
+import { useAsyncResource } from "../hooks/useAsyncResource";
 
 export function LoginClient() {
   const router = useRouter();
-  const { syncControlBar } = useApp();
+  const { syncControlBar, registerRefreshHandler } = useApp();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const {
+    data: auditLogs,
+    loading: auditLoading,
+    error: auditError,
+    run: runAudit,
+  } = useAsyncResource<AuditLogEntry[]>();
+
+  const loadAuditPreview = useCallback(() => {
+    void runAudit<{ logs?: AuditLogEntry[]; error?: string }>(
+      () => apiJson("/api/audit-logs?ui_poll=1"),
+      (body) => (body.logs || []).slice(0, 8),
+      (status) =>
+        `Audit log endpoint protected (HTTP ${status}). Sign in as admin to view logs in SECURE mode.`
+    );
+  }, [runAudit]);
+
+  useEffect(() => {
+    loadAuditPreview();
+    return registerRefreshHandler(loadAuditPreview);
+  }, [loadAuditPreview, registerRefreshHandler]);
+
+  const fillAccount = (demoUsername: string, demoPassword: string) => {
+    setUsername(demoUsername);
+    setPassword(demoPassword);
+    setFeedback(null);
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,10 +52,13 @@ export function LoginClient() {
     setFeedback(null);
 
     try {
-      const res = await apiJson<{ user?: { username: string; role: string }; error?: string }>("/api/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password }),
-      });
+      const res = await apiJson<{ user?: { username: string; role: string }; error?: string }>(
+        "/api/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        }
+      );
 
       if (res.ok) {
         await syncControlBar();
@@ -32,6 +67,7 @@ export function LoginClient() {
       }
 
       setFeedback(res.data.error || "Authentication failed.");
+      loadAuditPreview();
     } catch {
       setFeedback("Network or server error during sign in.");
     } finally {
@@ -40,119 +76,162 @@ export function LoginClient() {
   };
 
   return (
-    <main className="min-h-screen bg-[#07090e] flex items-center justify-center p-4 sm:p-6 lg:p-8 w-full">
-      {/* Container utama */}
-      <div className="w-full max-w-4xl bg-[#0d1117] border border-[#21262d] rounded-[28px] p-8 sm:p-12 shadow-2xl flex flex-col md:flex-row items-center gap-8 lg:gap-12">
-        {/* Kolom Kiri: Branding & Header */}
-        <div className="w-full md:w-1/2 flex flex-col justify-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/35 bg-amber-500/10 text-amber-500 text-xs font-medium w-fit mb-6">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-              <line x1="2" y1="10" x2="22" y2="10"></line>
-            </svg>
-            <span>FinVault E-Wallet</span>
+    <>
+      <main className="container main-content">
+        <div className="page-header">
+          <div>
+            <h1>FinVault E-Wallet Portal</h1>
+            <p className="page-header__desc">
+              Custom penetration testing target for Topic B20 (No API Authentication and Insecure Change Password Feature).
+            </p>
+          </div>
+        </div>
+
+        <GlobalBanner />
+
+        <section className="panels panels--split" aria-label="Authentication workspace">
+          <div className="panel">
+            <div className="panel__head">
+              <h2>Account sign in</h2>
+            </div>
+            <p className="panel__sub">
+              Authenticate with a seeded customer or administrator account to start a session cookie.
+            </p>
+
+            <form id="loginForm" className="form-grid" onSubmit={handleLoginSubmit} noValidate>
+              <div className="field">
+                <label htmlFor="usernameInput" className="field__label">
+                  Username
+                </label>
+                <input
+                  id="usernameInput"
+                  name="username"
+                  type="text"
+                  className="field__input"
+                  autoComplete="username"
+                  placeholder="danish"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="passwordInput" className="field__label">
+                  Password
+                </label>
+                <input
+                  id="passwordInput"
+                  name="password"
+                  type="password"
+                  className="field__input"
+                  autoComplete="current-password"
+                  placeholder="Enter account password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              {feedback && (
+                <div id="loginFeedback" className="status-banner status-banner--bad" role="alert">
+                  {feedback}
+                </div>
+              )}
+
+              <div className="actions-row">
+                <button
+                  id="loginSubmitBtn"
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Signing in…" : "Sign in"}
+                </button>
+                <Link href="/dashboard" className="btn">
+                  Open dashboard
+                </Link>
+              </div>
+            </form>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight">
-            Manage Your
-          </h1>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#fbbf24] tracking-tight leading-tight mb-6">
-            Finances Securely
-          </h2>
-          <p className="text-[#8b949e] text-sm sm:text-base leading-relaxed max-w-sm">
-            Sign in to your FinVault portal to monitor balances, track real-time transactions, and manage your digital wallet.
-          </p>
-        </div>
-
-        {/* Kolom Kanan: Card Form Login FinVault */}
-        <div className="w-full md:w-1/2 bg-[#f59e0b] rounded-[20px] p-6 sm:p-8 shadow-lg text-black flex flex-col justify-center">
-          <form onSubmit={handleLoginSubmit} noValidate className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="usernameInput"
-                className="block text-xs font-bold uppercase tracking-wider text-[#3d2700]"
-              >
-                Username
-              </label>
-              <input
-                id="usernameInput"
-                name="username"
-                type="text"
-                autoComplete="username"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-xl bg-[#fbbf24] text-[#1c1200] placeholder-[#7a5c00] font-medium border border-[#d97706] focus:outline-none focus:ring-2 focus:ring-black/40 text-sm transition-all"
-              />
+          <div className="panel panel--deep">
+            <div className="panel__head">
+              <h2>Seeded test accounts</h2>
             </div>
+            <p className="panel__sub">
+              Use these accounts to test privilege boundaries and chained Account Takeover.
+            </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="passwordInput"
-                className="block text-xs font-bold uppercase tracking-wider text-[#3d2700]"
-              >
-                Password
-              </label>
-              <input
-                id="passwordInput"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 rounded-xl bg-[#fbbf24] text-[#1c1200] placeholder-[#7a5c00] font-medium border border-[#d97706] focus:outline-none focus:ring-2 focus:ring-black/40 text-sm transition-all"
-              />
-            </div>
-
-            {feedback && (
-              <div
-                id="loginFeedback"
-                className="p-2.5 rounded-lg bg-black/85 text-red-300 text-xs font-medium border border-red-500/40"
-                role="alert"
-              >
-                {feedback}
-              </div>
-            )}
-
-            <div className="pt-2">
-              <button
-                id="loginSubmitBtn"
-                type="submit"
-                disabled={isSubmitting}
-                className="w-fit px-7 py-3 rounded-full bg-black hover:bg-[#1a1a1a] text-white font-semibold text-sm inline-flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="-rotate-45"
+            <div className="credential-list">
+              <div className="credential-item">
+                <div>
+                  <div className="measured">danish (customer)</div>
+                  <div className="field__hint measured">DanishPass123</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => fillAccount("danish", "DanishPass123")}
                 >
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-                <span>{isSubmitting ? "Signing in…" : "Sign In"}</span>
+                  Fill customer
+                </button>
+              </div>
+              <div className="credential-item">
+                <div>
+                  <div className="measured">budi (customer)</div>
+                  <div className="field__hint measured">BudiWallet123</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => fillAccount("budi", "BudiWallet123")}
+                >
+                  Fill budi
+                </button>
+              </div>
+              <div className="credential-item">
+                <div>
+                  <div className="measured">admin (administrator)</div>
+                  <div className="field__hint measured">AdminVault#2026</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => fillAccount("admin", "AdminVault#2026")}
+                >
+                  Fill admin
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="panels" aria-label="Security audit preview">
+          <div className="panel">
+            <div className="panel__head">
+              <h2>Live security audit trail</h2>
+              <button
+                id="refreshLoginAuditBtn"
+                type="button"
+                className="btn"
+                disabled={auditLoading}
+                onClick={loadAuditPreview}
+              >
+                Refresh logs
               </button>
             </div>
-          </form>
-        </div>
-      </div>
-    </main>
+            <AuditTable
+              logs={auditLogs || []}
+              loading={auditLoading}
+              errorMessage={auditError}
+              emptyMessage="No audit log entries recorded yet."
+            />
+          </div>
+        </section>
+      </main>
+
+      <Footer detail="Kelompok 12" />
+    </>
   );
 }

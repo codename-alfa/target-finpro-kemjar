@@ -10,8 +10,8 @@ FinVault Portal adalah aplikasi web dan REST API e-wallet buatan sendiri untuk P
 | Database | PostgreSQL 18 lokal (`pg` pool pada `127.0.0.1:5432`, database `finvault_b20`) |
 | Autentikasi & Hashing | `express-session` (`finvault.sid`, `HttpOnly`, `SameSite=Lax`) dan `bcryptjs` |
 | Konfigurasi Lingkungan | `dotenv` (opsional via `.env`, dengan fallback default di kode) |
-| Listening Address | `0.0.0.0:5000` (dapat diakses dari localhost Windows maupun VM Kali Linux Bridged) |
-| Frontend UI | Vanilla HTML5, CSS3, dan JavaScript (`public/login.html`, `public/dashboard.html`, `public/change-password.html`) |
+| Listening Address | `0.0.0.0:5000` (unified custom server Express + Next.js pada satu port) |
+| Frontend UI | Next.js 16 + React 19 (`frontend/`, routes `/login`, `/dashboard`, `/change-password`, `/profile`) serta fallback statis di `public/` bila `DISABLE_NEXT=true` |
 | Pencatatan Audit | Dual-sink logger ke tabel `audit_logs` di PostgreSQL dan file `logs/security_audit.log` |
 
 ```mermaid
@@ -57,11 +57,14 @@ Perintah yang tersedia di `package.json`:
 
 | Perintah | Fungsi |
 | :--- | :--- |
-| `npm start` | Menyalakan server pada `0.0.0.0:5000` dengan mode default `VULNERABLE` (atau sesuai `SEC_MODE` di `.env`) |
-| `npm run start:vuln` | Menyalakan server langsung dalam mode `VULNERABLE` |
-| `npm run start:secure` | Menyalakan server langsung dalam mode `SECURE` |
+| `npm start` | Menyalakan unified server Express + Next.js pada `0.0.0.0:5000` (mode produksi `.next` jika tersedia, atau fallback ke mode dev) |
+| `npm run dev` | Menyalakan unified server Express + Next.js dalam mode dev (HMR) pada `0.0.0.0:5000` |
+| `npm run build` | Membuild bundle produksi Next.js di folder `frontend/` |
+| `npm run start:vuln` | Menyalakan unified server langsung dalam mode `VULNERABLE` |
+| `npm run start:secure` | Menyalakan unified server langsung dalam mode `SECURE` |
 | `npm run seed` | Memastikan database `finvault_b20` dan tabel siap, lalu mereset data awal |
 | `npm run verify` | Menjalankan uji otomatis seluruh 5 tahap SOP dan edge case via `scripts/verify_pentest_stages.js` |
+| `npm run frontend:lint` | Menjalankan ESLint pada aplikasi Next.js di `frontend/` |
 
 ### Akun Demo Bawaan
 
@@ -92,18 +95,35 @@ finvault-b20/
 │   ├── vuln.js                                   # Implementasi endpoint rentan (Tahap 1 sampai 3)
 │   └── secure.js                                 # Implementasi endpoint aman hasil remediasi (Tahap 4 dan 5)
 ├── public/
-│   ├── login.html                                # Halaman sign in dan preview audit log
-│   ├── dashboard.html                            # Ringkasan saldo, mutasi, direktori /api/users, dan audit trail
-│   ├── change-password.html                      # Form ganti password dan HTTP payload inspector
-│   ├── app.js                                    # Logika client-side UI, sinkronisasi control bar, dan fetch API
-│   ├── styles.css                                # Stylesheet utama aplikasi
-│   ├── tokens.css                                # Token warna, tipografi, dan skala jarak
-│   └── base.css                                  # Aturan dasar HTML, aksesibilitas fokus, dan reduced-motion
+│   └── ...                                       # Fallback halaman statis Vanilla HTML/CSS/JS
+├── frontend/                                     # Aplikasi Next.js 16 + React 19 + Tailwind CSS v4
+│   ├── next.config.ts                            # Rewrite /api/* dan /robots.txt ke Express backend
+│   └── app/                                      # Routes (/login, /dashboard, /change-password, /profile)
+├── exploits/                                     # CLI demo eksploitasi Python (attack.py, conf/, src/, results/)
 ├── logs/
 │   └── security_audit.log                        # Berkas log aktivitas keamanan (otomatis dibuat saat runtime)
 └── scripts/
     ├── seed.js                                   # Skrip CLI reset & seed PostgreSQL
     └── verify_pentest_stages.js                  # Test suite otomatis 5 tahap SOP
+```
+
+### Menjalankan Unified Server (1 Terminal, 1 Port) dan Exploit CLI Demo
+
+```powershell
+# Persiapan awal (sekali di awal atau setelah mengubah kode frontend)
+cd d:\programming\kemjar\pentest\finvault-b20
+npm install
+npm --prefix frontend ci
+npm run build
+
+# Menjalankan unified server Express + Next.js di http://0.0.0.0:5000
+npm start
+
+# Atau jalankan dalam mode development (HMR aktif) di http://0.0.0.0:5000
+npm run dev
+
+# Opsional: Jalankan CLI demo exploit Python
+python d:\programming\kemjar\pentest\finvault-b20\exploits\attack.py -A
 ```
 
 ## 4. Skema Database (`finvault_b20`)
@@ -123,9 +143,9 @@ Skema didefinisikan di `initDatabase()` pada `db.js`:
 
 | Method & Path | Fungsi |
 | :--- | :--- |
-| `GET /`, `GET /login` | Menyajikan `public/login.html` |
-| `GET /dashboard` | Menyajikan `public/dashboard.html` |
-| `GET /change-password` | Menyajikan `public/change-password.html` |
+| `GET /`, `GET /login` | Mengarahkan `/` ke `/login` dan menyajikan halaman masuk Next.js (atau fallback `public/login.html` bila `DISABLE_NEXT=true`) |
+| `GET /dashboard` | Menyajikan dashboard e-wallet, ledger transaksi, probe `/api/users`, dan audit trail Next.js |
+| `GET /change-password`, `GET /profile` | Menyajikan form ganti password dan HTTP Payload Inspector Next.js |
 | `GET /robots.txt` | Menampilkan daftar `Disallow` (`/api/`, `/api/users`, `/api/transactions`, `/api/audit-logs`, `/change-password`) sebagai jejak enumerasi |
 | `GET /api` | Mengembalikan indeks metadata service, mode aktif, dan daftar seluruh endpoint API |
 | `POST /api/login` | Autentikasi `username` dan `password` memakai `bcryptjs.compare`, lalu membuat sesi `req.session.user` |
