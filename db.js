@@ -32,10 +32,10 @@ const SEED_USERS = [
     role: 'customer'
   },
   {
-    username: 'budi',
-    password: 'BudiWallet123',
-    fullName: 'Budi Santoso',
-    email: 'budi@finvault.local',
+    username: 'raihan',
+    password: 'rehanwangsaf67',
+    fullName: 'Raihan Muhammad',
+    email: 'raihan@finvault.local',
     accountNumber: '8800-1024-02',
     balance: 4750000,
     role: 'customer'
@@ -74,14 +74,14 @@ const SEED_TRANSACTIONS = [
     description: 'Cloud infrastructure settlement'
   },
   {
-    username: 'budi',
+    username: 'raihan',
     txCode: 'TX-20261120-004',
     type: 'CREDIT',
     amount: 5500000,
     description: 'Merchant settlement batch'
   },
   {
-    username: 'budi',
+    username: 'raihan',
     txCode: 'TX-20261120-005',
     type: 'DEBIT',
     amount: 750000,

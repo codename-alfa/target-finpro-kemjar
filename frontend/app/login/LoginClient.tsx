@@ -179,15 +179,15 @@ export function LoginClient() {
               </div>
               <div className="credential-item">
                 <div>
-                  <div className="measured">budi (customer)</div>
-                  <div className="field__hint measured">BudiWallet123</div>
+                  <div className="measured">raihan (customer)</div>
+                  <div className="field__hint measured">rehanwangsaf67</div>
                 </div>
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => fillAccount("budi", "BudiWallet123")}
+                  onClick={() => fillAccount("raihan", "rehanwangsaf67")}
                 >
-                  Fill budi
+                  Fill raihan
                 </button>
               </div>
               <div className="credential-item">
